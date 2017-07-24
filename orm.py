@@ -19,6 +19,56 @@ class ORM:
     def set_table(self, tb_name):
         self.tb_name = tb_name
 
+    def test(self):
+        print('this is teset113')
+
+    def create_table(self, recipe):
+        with self.conn as c:
+
+            tbl_name = recipe['table_name']
+
+            tbl_column_instructions = ''
+
+            i = 1
+            for field in recipe['fields']:
+                instruction = "`" + field['name'] + "`" #name
+                instruction += " " + field['type']
+
+                if 'length' in field:
+                    instruction += "("+ str(field['length']) +")"
+
+                if 'primary_key' in field and field['primary_key'] == True:
+                    instruction += " PRIMARY KEY"
+
+                if 'auto_increment' in field and field['auto_increment'] == True:
+                    instruction += " AUTO_INCREMENT"
+
+                if 'unique' in field and field['unique'] == True:
+                    instruction += " UNIQUE"
+
+                if 'primary_key' in field or ('null' in field and field['null'] == False):
+                    instruction += " NOT NULL"
+
+                if i < len(recipe['fields']):
+                    instruction += " ,"
+
+                i += 1
+
+                tbl_column_instructions += instruction
+
+            collate = " CHARACTER SET utf8 COLLATE utf8_unicode_ci"
+            statement = "CREATE TABLE IF NOT EXISTS `" + tbl_name + "` (" + tbl_column_instructions + ")" + collate
+            # statement = "CREATE TABLE IF NOT EXISTS `" + tbl_name + "` (`id` INT(9) NOT NULL AUTO_INCREMENT PRIMARY KEY ,  `name` VARCHAR(255) NULL)" + collate
+
+            try:
+                c.execute(statement)
+                # rows = c.fetchall()
+
+            except Exception, e:
+                print(e)
+                print('Read Error')
+
+
     def read(self, instructions = {}, cols = '', returnKey = ''):
 
         with self.conn as c:
@@ -100,6 +150,12 @@ class ORM:
                 print(e)
                 print('Read Error')
 
+    # row = {
+    #     'id': theme_id,
+    #     'name': title,
+    #     'author': author_id,
+    #     'category': category_id
+    # }
     def insert(self, record, returnID = False):
 
         with self.conn as c:
