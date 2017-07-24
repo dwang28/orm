@@ -3,6 +3,11 @@ import MySQLdb
 import time
 from functions import *
 
+
+
+class DuplicateEntryError(ValueError):
+    pass
+
 class ORM:
 
     host = 'localhost'
@@ -49,6 +54,10 @@ class ORM:
                 if 'primary_key' in field or ('null' in field and field['null'] == False):
                     instruction += " NOT NULL"
 
+
+                if 'default' in field:
+                    instruction += " DEFAULT "+ field['default']
+
                 if i < len(recipe['fields']):
                     instruction += " ,"
 
@@ -88,7 +97,7 @@ class ORM:
                 else:
                     perimeter += "`" + key + "`  LIKE '" + str(instructions[key]) + "'"
 
-                if i < len(record):
+                if i < len(instructions):
                     perimeter += ' AND '
 
                 i += 1
@@ -192,9 +201,27 @@ class ORM:
                     return lastID
 
             except Exception, e:
-                print(e)
-                print('Insert Error:: statement>>' + statement)
-                raise Exception
+                if str(e)[:23] == '(1062, "Duplicate entry': #duplicate entry
+
+                    result = self.read({'name': 'Linas Kilius'})
+
+                    if len(result) == 1: #found one record
+                        # print(result[0][0]) #assuming the first column is the id, otherwise it won't work
+                        raise DuplicateEntryError(result[0][0])
+                    else:
+                        print(e)
+                        raise DuplicateEntryError(result[0][0])
+
+
+                    return 'Dupliacte Entry'
+
+
+                else:
+                    print('Insert Error:: statement>>' + statement)
+                    # message = template.format(type(e).__name__, e.args)
+                    print(type(e).__name__)
+
+                    raise Exception
 
 
     def close(self):
