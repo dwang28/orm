@@ -67,11 +67,32 @@ class ORM:
 
             try:
                 c.execute(statement)
-                # rows = c.fetchall()
 
             except Exception, e:
                 print(e)
-                print('Read Error')
+                print('Error Creating Table')
+
+            if 'unique' in recipe:
+                statement = "ALTER TABLE " + tbl_name + " "
+
+
+                i = 1
+                column_instruction = ''
+                for column_name in recipe['unique']:
+                    column_instruction += "`" + column_name + "`"
+
+                    if i < len(recipe['unique']):
+                        column_instruction += ", "
+
+                    i += 1
+
+                statement += "ADD UNIQUE KEY `"+ tbl_name+ "_unique_key` (" + column_instruction + ")"
+                try:
+                    c.execute(statement)
+                except Exception, e:
+                    print(e)
+                    print('Error setting up unique key')
+
 
     def test(self):
 
