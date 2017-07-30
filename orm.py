@@ -24,9 +24,6 @@ class ORM:
     def set_table(self, tb_name):
         self.tb_name = tb_name
 
-    def test(self):
-        print('this is teset113')
-
     def create_table(self, recipe):
         with self.conn as c:
 
@@ -67,7 +64,6 @@ class ORM:
 
             collate = " CHARACTER SET utf8 COLLATE utf8_unicode_ci"
             statement = "CREATE TABLE IF NOT EXISTS `" + tbl_name + "` (" + tbl_column_instructions + ")" + collate
-            # statement = "CREATE TABLE IF NOT EXISTS `" + tbl_name + "` (`id` INT(9) NOT NULL AUTO_INCREMENT PRIMARY KEY ,  `name` VARCHAR(255) NULL)" + collate
 
             try:
                 c.execute(statement)
@@ -76,6 +72,20 @@ class ORM:
             except Exception, e:
                 print(e)
                 print('Read Error')
+
+    def test(self):
+
+        with self.conn as c:
+            statement = "SHOW COLUMNS FROM "+ self.tb_name
+
+            try:
+                result = c.execute(statement)
+
+            except Exception, e:
+                print(e)
+
+            print(type(result))
+
 
 
     def read(self, instructions = {}, cols = '', returnKey = ''):
@@ -90,15 +100,20 @@ class ORM:
             i = 1
             for key in instructions:
 
+                #prepare perimeter key
                 if is_number(instructions[key]):
-                    perimeter += "`" + key + "` = " + str(instructions[key])
+                    perimeter += "`" + key + "` = %(" + key+ ")s"
                 elif instructions[key] == None:
                     perimeter += "IS NULL"
                 else:
-                    perimeter += "`" + key + "`  LIKE '" + str(instructions[key]) + "'"
+                    perimeter += "`" + key + "`  LIKE %(" + key+ ")s"
 
                 if i < len(instructions):
                     perimeter += ' AND '
+
+                #escape special charecters
+                if isinstance(instructions[key], basestring):
+                    instructions[key] =  instructions[key].replace('\\', '\\\\')
 
                 i += 1
 
@@ -121,7 +136,8 @@ class ORM:
             statement = "SELECT " + column_criteria + " FROM `" + self.tb_name + "`" + perimeter
 
             try:
-                c.execute(statement)
+                #ref: https://dev.mysql.com/doc/connector-python/en/connector-python-api-mysqlcursor-execute.html
+                c.execute(statement, instructions)
                 rows = c.fetchall()
 
                 if cols and isinstance(cols, basestring): #return a list
@@ -152,12 +168,13 @@ class ORM:
                         new_rows[rows[x][key_index]] = row
 
                     return new_rows
-
                 return rows
 
             except Exception, e:
+                print('Read Error, see error message, statement instructions to select below')
                 print(e)
-                print('Read Error')
+                print(statement)
+                print(instructions)
 
     # row = {
     #     'id': theme_id,
@@ -169,31 +186,41 @@ class ORM:
 
         with self.conn as c:
             table_keys = ''
-            row_values = ''
+            # row_values = ''
+            value_placeholder = ''
+            values = []
 
             i = 1
             for key in record:
                 table_keys += "`" + key + "`,"
 
-                value = '"' + str(record[key]) + '"'
+                value_placeholder += "%s,"
+                # value = '"' + str(record[key]) + '"'
+
+
+                value = str(record[key])
 
                 if record[key] == None:
                     value = 'NULL'
 
-                row_values += value + ","
+                values.append(value)
+                # row_values += value + ","
 
                 if i == len(record):
                     #remove the last ','
                     table_keys = table_keys[:-1]
-                    row_values = row_values[:-1]
+                    value_placeholder = value_placeholder[:-1]
 
                 i += 1
 
-            # statement = 'INSERT INTO `' + self.database + '`.`' + self.tb_name + '` (' + table_keys + ') VALUES (' + row_values + ')'
-            statement = "INSERT INTO `" + self.database + "`.`" + self.tb_name + "` (" + table_keys + ") VALUES (" + row_values + ")"
+            statement = "INSERT INTO `" + self.database + "`.`" + self.tb_name + "` (" + table_keys + ") VALUES (" + value_placeholder + ")"
+            # statement = "INSERT INTO `" + self.database + "`.`" + self.tb_name + "` (" + table_keys + ") VALUES (" + row_values + ")"
 
             try:
-                c.execute(statement)
+                value_tuple = tuple(values)
+
+                c.execute(statement, value_tuple)
+                # c.execute(statement)
                 self.conn.commit()  # without it, the insert c.execute() command above will not run
 
                 if returnID != False:
@@ -203,14 +230,42 @@ class ORM:
             except Exception, e:
                 if str(e)[:23] == '(1062, "Duplicate entry': #duplicate entry
 
-                    result = self.read({'name': 'Linas Kilius'})
+                    result = self.read(record)
 
                     if len(result) == 1: #found one record
-                        # print(result[0][0]) #assuming the first column is the id, otherwise it won't work
+                        # #assuming the first column is the id, otherwise it won't work
                         raise DuplicateEntryError(result[0][0])
+
+                    elif len(result) == 0: #differnt set of info for the same unique key
+
+                        msg = e.args[1]
+
+                        duplicate_entry = msg.find("Duplicate entry '")
+
+                        begin_of_value = duplicate_entry+17
+                        end_of_value = 17+ msg[begin_of_value:].find("'")
+
+                        value = msg[begin_of_value:end_of_value]
+
+
+                        begin_of_key = end_of_value + 9 + msg[end_of_value:].find("for key '")
+                        end_of_key = begin_of_key + msg[begin_of_key:].find("'")
+
+                        key = msg[begin_of_key:end_of_key]
+
+
+                        if key in record and record[key] == value:
+                            result = self.read({key:value})
+                            raise DuplicateEntryError(result[0][0])
+
+                        else:
+                            print(record)
+                            raise ValueError('Failed to update record for duplicate entry ' + str(key) + ":" + str(value))
+
                     else:
                         print(e)
-                        raise DuplicateEntryError(result[0][0])
+                        print(statement)
+                        raise ValueError('Found ' + str(len(result)) + ' entry when try to locate id of existing record')
 
 
                     return 'Dupliacte Entry'
